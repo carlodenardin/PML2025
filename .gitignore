@@ -5,5 +5,3 @@ __pycache__/
 .ipynb_checkpoints/
 *.pth
 results/
-logs/
-models/
