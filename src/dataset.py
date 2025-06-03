@@ -1,7 +1,7 @@
 import os
 import numpy as np
 import torch
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset, DataLoader, random_split # Aggiunto random_split
 from torchvision import transforms
 import requests
 from tqdm import tqdm
@@ -26,16 +26,15 @@ class DSpritesDataset(Dataset):
             raise FileNotFoundError(f"Dataset not found at {self.filepath}. Please ensure it's downloaded.")
 
         dataset_zip = np.load(self.filepath, allow_pickle=True, encoding='bytes')
-        self.imgs = dataset_zip['imgs'] # These are (737280, 64, 64) numpy arrays, dtype=uint8
+        self.imgs = dataset_zip['imgs']
         self.latents_values = dataset_zip['latents_values']
-        # latents_classes = dataset_zip['latents_classes']
-        # metadata = dataset_zip['metadata'][()]
+        # metadata = dataset_zip['metadata'][()] # Se ti servissero i metadati
 
     def _download(self):
         print(f"Downloading dSprites dataset to {self.filepath}...")
         response = requests.get(DSPRITES_URL, stream=True)
         total_size_in_bytes = int(response.headers.get('content-length', 0))
-        block_size = 1024  # 1 Kibibyte
+        block_size = 1024
 
         progress_bar = tqdm(total=total_size_in_bytes, unit='iB', unit_scale=True)
         with open(self.filepath, 'wb') as file:
@@ -53,40 +52,43 @@ class DSpritesDataset(Dataset):
         return len(self.imgs)
 
     def __getitem__(self, idx):
-        # Image is (64, 64), convert to (1, 64, 64) and float tensor
-        image = self.imgs[idx].astype(np.float32) # Ensure float for ToTensor
-        # ToTensor expects (H, W, C) or (H, W) if single channel.
-        # Our images are (64,64). ToTensor will make it (1,64,64) and scale to [0,1]
+        image = self.imgs[idx].astype(np.float32)
         if self.transform:
             image = self.transform(image)
         return image
 
 class DSpritesDataModule(pl.LightningDataModule):
-    def __init__(self, data_dir: str = "data/dsprites", batch_size: int = 64, num_workers: int = 4):
+    def __init__(self, data_dir: str = "data/dsprites", batch_size: int = 64, num_workers: int = 4, train_val_test_split = [0.7, 0.15, 0.15]):
         super().__init__()
         self.data_dir = data_dir
         self.batch_size = batch_size
         self.num_workers = num_workers
+        self.train_val_test_split = train_val_test_split
         self.transform = transforms.Compose([
-            transforms.ToTensor() # Converts numpy HWC/HW to CHW tensor and scales to [0,1]
+            transforms.ToTensor()
         ])
+        self.dsprites_train = None
+        self.dsprites_val = None
+        self.dsprites_test = None
+
 
     def prepare_data(self):
-        # download only
         DSpritesDataset(self.data_dir, download=True)
 
     def setup(self, stage=None):
-        if stage == 'fit' or stage is None:
+        if not self.dsprites_train and not self.dsprites_val and not self.dsprites_test: # Esegui solo una volta
             dsprites_full = DSpritesDataset(self.data_dir, download=False, transform=self.transform)
-            # Simple split, for a real project, consider fixed splits or more robust validation
-            train_size = int(0.8 * len(dsprites_full))
-            val_size = len(dsprites_full) - train_size
-            self.dsprites_train, self.dsprites_val = torch.utils.data.random_split(
-                dsprites_full, [train_size, val_size]
+            
+            total_len = len(dsprites_full)
+            train_len = int(self.train_val_test_split[0] * total_len)
+            val_len = int(self.train_val_test_split[1] * total_len)
+            test_len = total_len - train_len - val_len
+
+            self.dsprites_train, self.dsprites_val, self.dsprites_test = random_split(
+                dsprites_full, [train_len, val_len, test_len],
+                generator=torch.Generator().manual_seed(42) # Per riproducibilità dello split
             )
-        # Add test split if needed
-        # if stage == 'test' or stage is None:
-        #     self.dsprites_test = DSpritesDataset(self.data_dir, download=False, transform=self.transform)
+            print(f"Dataset split: Train={len(self.dsprites_train)}, Val={len(self.dsprites_val)}, Test={len(self.dsprites_test)}")
 
 
     def train_dataloader(self):
@@ -95,5 +97,5 @@ class DSpritesDataModule(pl.LightningDataModule):
     def val_dataloader(self):
         return DataLoader(self.dsprites_val, batch_size=self.batch_size, num_workers=self.num_workers, pin_memory=True)
 
-    # def test_dataloader(self):
-    #     return DataLoader(self.dsprites_test, batch_size=self.batch_size, num_workers=self.num_workers)
+    def test_dataloader(self): # Nuovo metodo
+        return DataLoader(self.dsprites_test, batch_size=self.batch_size, num_workers=self.num_workers, pin_memory=True, shuffle=False) # Shuffle False per test riproducibili se si calcolano metriche
