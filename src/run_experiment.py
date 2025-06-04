@@ -101,7 +101,7 @@ def main():
     if config.run_visualizations:
         print("\nEsecuzione visualizzazioni e calcolo metriche...")
         dm.setup(stage='test')
-        run_visualizations(best_model, dm.test_dataloader(), config, output_dir, device)
+        # run_visualizations(best_model, dm.test_dataloader(), config, output_dir, device)
         mig_score = compute_mig(best_model, dm.test_dataloader(), device=device)
         print(f"MIG Score: {mig_score:.4f}")
 
