@@ -2,12 +2,67 @@ import torch
 import matplotlib.pyplot as plt
 import numpy as np
 import os
+from pathlib import Path
 import random
 import imageio
+from sklearn.metrics import mutual_info_score
 
-# ... (la funzione visualize_reconstructions e get_accelerator rimangono qui) ...
-# La vecchia funzione visualize_latent_traversals può essere rimossa o commentata
-# se questa nuova la sostituisce per il tuo scopo.
+def get_random_images(dataloader, n_images, device):
+    """Raccoglie n_images casuali dal dataloader e le trasferisce al device."""
+    all_images = []
+    num_batches = (n_images + dataloader.batch_size - 1) // dataloader.batch_size
+    for i, batch in enumerate(dataloader):
+        if isinstance(batch, (list, tuple)):
+            images = batch[0]
+        else:
+            images = batch
+        all_images.append(images)
+        if i + 1 >= num_batches:
+            break
+    if not all_images:
+        print("Nessuna immagine caricata dal dataloader.")
+        return None
+    all_images = torch.cat(all_images, dim=0)
+    n_available = len(all_images)
+    indices = random.sample(range(n_available), min(n_images, n_available))
+    return all_images[indices].to(device)
+
+def visualize_reconstructions(model, dataloader, n_images=10, device='cpu',
+                              output_dir="reconstruction_images",
+                              output_filename="reconstructions.png"):
+    """Visualizza e salva le ricostruzioni delle immagini."""
+    model.eval()
+    model.to(device)
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    selected_images = get_random_images(dataloader, n_images, device)
+    if selected_images is None:
+        return
+
+    with torch.no_grad():
+        mean, logvar = model.encoder(selected_images)
+        z = model._reparameterize(mean, logvar) if hasattr(model, '_reparameterize') else mean
+        reconstructed_logits = model.decoder(z)
+        reconstructed_images = torch.sigmoid(reconstructed_logits)
+
+    fig, axes = plt.subplots(len(selected_images), 2, figsize=(4, len(selected_images) * 2), squeeze=False)
+    for i in range(len(selected_images)):
+        axes[i, 0].imshow(selected_images[i].cpu().squeeze().numpy(), cmap='gray')
+        axes[i, 0].set_title(f"Originale {i+1}")
+        axes[i, 0].axis('off')
+        axes[i, 1].imshow(reconstructed_images[i].cpu().squeeze().numpy(), cmap='gray')
+        axes[i, 1].set_title(f"Ricostruita {i+1}")
+        axes[i, 1].axis('off')
+
+    plt.tight_layout()
+    save_path = output_dir / output_filename
+    try:
+        plt.savefig(save_path)
+        print(f"Immagine delle ricostruzioni salvata in: {save_path}")
+    except Exception as e:
+        print(f"Errore durante il salvataggio delle ricostruzioni: {e}")
+    plt.close(fig)
 
 def save_individual_latent_traversal_grids(model, dataloader,
                                            n_images_to_show=3,
@@ -16,183 +71,90 @@ def save_individual_latent_traversal_grids(model, dataloader,
                                            device='cpu',
                                            output_dir="traversal_grids_per_image",
                                            filename_prefix="traversal_grid_img_"):
-    """
-    Per n_images_to_show immagini selezionate casualmente dal dataloader (test set):
-    Crea e salva una griglia di immagini separata per ciascuna.
-    Ogni griglia mostra le traversate per ogni dimensione latente.
-    Righe: dimensioni latenti.
-    Colonne: valori di traversata per quella dimensione latente.
-    """
+    """Salva griglie di traversata latente per ogni immagine selezionata."""
     model.eval()
     model.to(device)
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
 
-    if not os.path.exists(output_dir):
-        os.makedirs(output_dir, exist_ok=True)
-        print(f"Creata directory per le griglie di traversata: {output_dir}")
-
-    # 1. Raccogli immagini dal dataloader
-    all_images_from_loader = []
-    # Assicurati di caricare abbastanza immagini se n_images_to_show è grande,
-    # o almeno un batch se n_images_to_show è piccolo.
-    num_batches_to_fetch = (n_images_to_show + dataloader.batch_size -1) // dataloader.batch_size
-    
-    for i, batch in enumerate(dataloader):
-        if isinstance(batch, list):
-            images_in_batch = batch[0]
-        else:
-            images_in_batch = batch
-        all_images_from_loader.append(images_in_batch)
-        if i + 1 >= num_batches_to_fetch:
-            break
-    
-    if not all_images_from_loader:
-        print("Nessuna immagine caricata dal dataloader per le traversate.")
-        return
-
-    all_images_from_loader = torch.cat(all_images_from_loader, dim=0)
-
-    # 2. Seleziona n_images_to_show casualmente
-    if len(all_images_from_loader) >= n_images_to_show:
-        indices = random.sample(range(len(all_images_from_loader)), n_images_to_show)
-        source_images = all_images_from_loader[indices].to(device)
-    elif len(all_images_from_loader) > 0:
-        source_images = all_images_from_loader[:n_images_to_show].to(device) # Prendi quelle disponibili
-        print(f"Attenzione: richieste {n_images_to_show} immagini, ma solo {len(source_images)} disponibili nel batch caricato.")
-        if len(source_images) == 0: return
-    else:
-        print("Non abbastanza immagini nel dataloader.")
+    source_images = get_random_images(dataloader, n_images_to_show, device)
+    if source_images is None:
         return
 
     latent_dim = model.latent_dim
     traversal_values = np.linspace(traverse_range[0], traverse_range[1], n_traversal_steps)
 
-    # 3. Loop per ogni immagine sorgente selezionata
     for img_idx in range(source_images.shape[0]):
-        original_image = source_images[img_idx:img_idx+1] # Mantieni la dimensione del batch
-
+        original_image = source_images[img_idx:img_idx+1]
         with torch.no_grad():
-            # Codifica l'immagine originale per ottenere z_mean come base
             z_mean_orig, _ = model.encoder(original_image)
-
-            # Plot: righe = dimensioni latenti, colonne = step di traversata
             fig, axes = plt.subplots(latent_dim, n_traversal_steps,
                                      figsize=(n_traversal_steps * 1.5, latent_dim * 1.5),
-                                     squeeze=False) # squeeze=False è importante
-            
+                                     squeeze=False)
             fig.suptitle(f"Traversate Latenti per Immagine Test {img_idx+1}", fontsize=10)
 
-            for i in range(latent_dim):  # Loop su ogni dimensione latente (righe)
-                z_base_for_dim_i = z_mean_orig.clone() # Usa la media dell'immagine originale come base
-
-                for j, val in enumerate(traversal_values):  # Loop sui valori di traversata (colonne)
+            for i in range(latent_dim):
+                z_base_for_dim_i = z_mean_orig.clone()
+                for j, val in enumerate(traversal_values):
                     z_traversed = z_base_for_dim_i.clone()
-                    z_traversed[0, i] = val  # Modifica la i-esima dimensione latente
-
+                    z_traversed[0, i] = val
                     reconstructed_logits = model.decoder(z_traversed)
                     reconstructed_image = torch.sigmoid(reconstructed_logits)
-                    
                     ax = axes[i, j]
                     ax.imshow(reconstructed_image.cpu().squeeze().numpy(), cmap='gray')
                     ax.axis('off')
-                    if i == 0: # Titolo della colonna solo per la prima riga
+                    if i == 0:
                         ax.set_title(f"{val:.1f}", fontsize=8)
-                
-                axes[i, 0].text(-10, axes[i,0].get_images()[0].get_array().shape[0]//2, f"z_{i}", 
+                axes[i, 0].text(-10, axes[i, 0].get_images()[0].get_array().shape[0]//2, f"z_{i}",
                                 va='center', ha='right', fontsize=8, rotation=0)
 
-
-            plt.tight_layout(rect=[0, 0.03, 1, 0.97]) # Aggiusta per suptitle
-
-            # Salva la figura per l'immagine corrente
-            current_filename = f"{filename_prefix}{img_idx+1}.png"
-            save_path = os.path.join(output_dir, current_filename)
+            plt.tight_layout(rect=[0, 0.03, 1, 0.97])
+            save_path = output_dir / f"{filename_prefix}{img_idx+1}.png"
             try:
                 plt.savefig(save_path)
                 print(f"Griglia di traversata per immagine {img_idx+1} salvata in: {save_path}")
             except Exception as e:
-                print(f"Errore durante il salvataggio della griglia di traversata per immagine {img_idx+1}: {e}")
+                print(f"Errore durante il salvataggio della griglia di traversata: {e}")
             plt.close(fig)
 
-# ----- La funzione visualize_reconstructions può rimanere com'è -----
-def visualize_reconstructions(model, dataloader, n_images=10, device='cpu',
-                              output_dir="reconstruction_images",
-                              output_filename="reconstructions.png"):
-    # ... (codice esistente per visualize_reconstructions) ...
+def compute_mig(model, dataloader, n_samples=1000, device='cpu'):
+    """Calcola il Mutual Information Gap (MIG) per valutare il disentanglement."""
     model.eval()
     model.to(device)
+    latents, factors = [], []
 
-    if not os.path.exists(output_dir):
-        os.makedirs(output_dir, exist_ok=True)
-        print(f"Creata directory: {output_dir}")
-
-    all_images_from_loader = []
-    num_batches_to_fetch = (n_images + dataloader.batch_size -1) // dataloader.batch_size
-    
-    for i, batch in enumerate(dataloader):
-        if isinstance(batch, list):
-            images_in_batch = batch[0]
+    for batch in dataloader:
+        if isinstance(batch, (list, tuple)):
+            images, factor_values = batch
         else:
-            images_in_batch = batch
-        all_images_from_loader.append(images_in_batch)
-        if i + 1 >= num_batches_to_fetch:
+            images = batch
+            factor_values = None
+        images = images.to(device)
+        with torch.no_grad():
+            mean, _ = model.encoder(images)
+            latents.append(mean.cpu().numpy())
+            if factor_values is not None:
+                factors.append(factor_values.cpu().numpy())
+        if len(latents) * dataloader.batch_size >= n_samples:
             break
-    
-    if not all_images_from_loader:
-        print("Nessuna immagine caricata dal dataloader per la visualizzazione delle ricostruzioni.")
-        return
 
-    all_images_from_loader = torch.cat(all_images_from_loader, dim=0)
+    latents = np.concatenate(latents, axis=0)[:n_samples]
+    factors = np.concatenate(factors, axis=0)[:n_samples] if factors else None
 
-    if len(all_images_from_loader) > n_images:
-        indices = random.sample(range(len(all_images_from_loader)), n_images)
-        selected_images = all_images_from_loader[indices].to(device)
-    elif len(all_images_from_loader) > 0:
-        selected_images = all_images_from_loader[:n_images].to(device)
-        if len(selected_images) == 0: 
-            print("Non abbastanza immagini nel dataloader per visualizzare le ricostruzioni.")
-            return
-    else:
-        print("Non abbastanza immagini nel dataloader per visualizzare le ricostruzioni.")
-        return
-    
-    n_actual_images = selected_images.shape[0]
-    if n_actual_images == 0:
-        print("Nessuna immagine selezionata per la visualizzazione.")
-        return
+    if factors is None:
+        raise ValueError("Latent factors required for MIG computation")
 
-    with torch.no_grad():
-        mean, logvar = model.encoder(selected_images)
-        if hasattr(model, '_reparameterize'):
-            z = model._reparameterize(mean, logvar)
-        else:
-            z = mean
-        reconstructed_logits = model.decoder(z)
-        reconstructed_images = torch.sigmoid(reconstructed_logits)
+    n_latents, n_factors = latents.shape[1], factors.shape[1]
+    mi_matrix = np.zeros((n_latents, n_factors))
+    for i in range(n_latents):
+        for j in range(n_factors):
+            latent_vals = np.digitize(latents[:, i], np.linspace(latents[:, i].min(), latents[:, i].max(), 20))
+            factor_vals = np.digitize(factors[:, j], np.linspace(factors[:, j].min(), factors[:, j].max(), 20))
+            mi_matrix[i, j] = mutual_info_score(latent_vals, factor_vals)
 
-    fig, axes = plt.subplots(n_actual_images, 2, figsize=(4, n_actual_images * 2), squeeze=False)
-    # if n_actual_images == 1: 
-    #      axes = np.expand_dims(axes, axis=0) # Già gestito da squeeze=False
-
-    for i in range(n_actual_images):
-        ax = axes[i, 0]
-        ax.imshow(selected_images[i].cpu().squeeze().numpy(), cmap='gray')
-        ax.set_title(f"Originale {i+1}")
-        ax.axis('off')
-
-        ax = axes[i, 1]
-        ax.imshow(reconstructed_images[i].cpu().squeeze().numpy(), cmap='gray')
-        ax.set_title(f"Ricostruita {i+1}")
-        ax.axis('off')
-
-    plt.tight_layout()
-
-    save_path = os.path.join(output_dir, output_filename)
-    try:
-        plt.savefig(save_path)
-        print(f"Immagine delle ricostruzioni salvata in: {save_path}")
-    except Exception as e:
-        print(f"Errore durante il salvataggio dell'immagine delle ricostruzioni: {e}")
-    plt.close(fig)
+    sorted_mi = np.sort(mi_matrix, axis=0)[::-1]
+    mig = (sorted_mi[0] - sorted_mi[1]).mean() / sorted_mi[0].mean() if sorted_mi[0].mean() > 0 else 0
+    return mig
 
 def get_accelerator():
     if torch.cuda.is_available():
@@ -203,3 +165,32 @@ def get_accelerator():
     except AttributeError:
         pass
     return "cpu"
+
+def run_visualizations(model, dataloader, config, output_dir, device):
+    """Esegue tutte le visualizzazioni (ricostruzioni e traversate latenti)."""
+    output_dir = Path(output_dir)
+    model.eval()
+    model.to(device)
+
+    # Ricostruzioni
+    recon_dir = output_dir / "reconstructions"
+    recon_dir.mkdir(parents=True, exist_ok=True)
+    images = get_random_images(dataloader, config.n_reconstruction_images, device)
+    if images is not None:
+        visualize_reconstructions(
+            model, images, n_images=len(images), device=device,
+            output_dir=recon_dir, output_filename=f"reconstructions_ep{model.current_epoch or 'final'}.png"
+        )
+
+    # Traversate latenti
+    traversal_dir = output_dir / "static_traversals"
+    traversal_dir.mkdir(parents=True, exist_ok=True)
+    images = get_random_images(dataloader, config.n_images_for_static_traversals, device)
+    if images is not None:
+        save_individual_latent_traversal_grids(
+            model, images, n_images_to_show=len(images),
+            n_traversal_steps=config.n_traversal_steps_per_dim,
+            traverse_range=(config.traversal_range_min, config.traversal_range_max),
+            device=device, output_dir=traversal_dir,
+            filename_prefix=f"static_traversal_ep{model.current_epoch or 'final'}_img_"
+        )
