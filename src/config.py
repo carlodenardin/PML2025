@@ -1,7 +1,7 @@
 class ExperimentConfig:
     # Dataset
     data_dir: str = "data/dsprites"
-    batch_size: int = 1024
+    batch_size: int = 512
     num_workers: int = 12
     train_val_test_split: list = [0.8, 0.10, 0.10]
 
@@ -10,7 +10,7 @@ class ExperimentConfig:
     lr_vae: float = 1e-4
     beta: float = 1
     lr_disc: float = 1e-4
-    gamma: float = 10
+    gamma: float = 5
     disc_hidden_units: int = 1000
     disc_layers: int = 6
 
