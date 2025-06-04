@@ -167,7 +167,6 @@ def get_accelerator():
     return "cpu"
 
 def run_visualizations(model, dataloader, config, output_dir, device):
-    """Esegue tutte le visualizzazioni (ricostruzioni e traversate latenti)."""
     output_dir = Path(output_dir)
     model.eval()
     model.to(device)
@@ -175,12 +174,10 @@ def run_visualizations(model, dataloader, config, output_dir, device):
     # Ricostruzioni
     recon_dir = output_dir / "reconstructions"
     recon_dir.mkdir(parents=True, exist_ok=True)
-    images = get_random_images(dataloader, config.n_reconstruction_images, device)
-    if images is not None:
-        visualize_reconstructions(
-            model, images, n_images=len(images), device=device,
-            output_dir=recon_dir, output_filename=f"reconstructions_ep{model.current_epoch or 'final'}.png"
-        )
+    visualize_reconstructions(
+        model, dataloader, n_images=config.n_reconstruction_images, device=device,
+        output_dir=recon_dir, output_filename=f"reconstructions_ep{model.current_epoch or 'final'}.png"
+    )
 
     # Traversate latenti
     traversal_dir = output_dir / "static_traversals"

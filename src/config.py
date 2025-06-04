@@ -15,7 +15,7 @@ class ExperimentConfig:
     disc_layers: int = 6
 
     # Training
-    epochs: int = 100
+    epochs: int = 5
     seed: int = 11
     patience_early_stopping: int = 5
     precision: str = "16-mixed"
