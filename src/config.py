@@ -1,8 +1,8 @@
 class ExperimentConfig:
     # Dataset
     data_dir: str = "data/dsprites"
-    batch_size: int = 512
-    num_workers: int = 8
+    batch_size: int = 1024
+    num_workers: int = 12
     train_val_test_split: list = [0.7, 0.15, 0.15]
 
     # Model
@@ -15,7 +15,7 @@ class ExperimentConfig:
     disc_layers: int = 6
 
     # Training
-    epochs: int = 5
+    epochs: int = 50
     seed: int = 11
     patience_early_stopping: int = 5
     precision: str = "16-mixed"
