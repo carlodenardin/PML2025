@@ -125,7 +125,8 @@ def main(args):
         devices=1 if current_accelerator != "cpu" else None,
         callbacks=[checkpoint_callback, early_stop_callback],
         logger=tensorboard_logger,
-        enable_progress_bar=True # O False se vuoi meno output verboso per script automatici
+        enable_progress_bar=True,
+        precision="16-mixed"
     )
 
     # Addestramento
