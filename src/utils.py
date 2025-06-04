@@ -64,57 +64,47 @@ def visualize_reconstructions(model, dataloader, n_images=10, device='cpu',
         print(f"Errore durante il salvataggio delle ricostruzioni: {e}")
     plt.close(fig)
 
-def save_individual_latent_traversal_grids(model, dataloader,
-                                           n_images_to_show=3,
-                                           n_traversal_steps=7,
-                                           traverse_range=(-2.5, 2.5),
-                                           device='cpu',
-                                           output_dir="traversal_grids_per_image",
-                                           filename_prefix="traversal_grid_img_"):
-    """Salva griglie di traversata latente per ogni immagine selezionata."""
+def save_individual_latent_traversal_grids(model, source_images, n_images_to_show=4, n_traversal_steps=10, traverse_range=(-2.0, 2.0), device='cpu', output_dir="traversal_images", filename_prefix="traversal"):
+    """Salva immagini di traversate latenti per ogni immagine sorgente e dimensione latente."""
     model.eval()
     model.to(device)
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    source_images = get_random_images(dataloader, n_images_to_show, device)
     if source_images is None:
+        print("Nessuna immagine sorgente fornita.")
         return
 
-    latent_dim = model.latent_dim
-    traversal_values = np.linspace(traverse_range[0], traverse_range[1], n_traversal_steps)
+    source_images = source_images[:n_images_to_show].to(device)  # Usa immagini fornite direttamente
+    latent_dim = model.latent_dim if hasattr(model, 'latent_dim') else source_images.shape[1]
+    
+    with torch.no_grad():
+        mean, logvar = model.encoder(source_images)
+        z = model._reparameterize(mean, logvar) if hasattr(model, '_reparameterize') else mean
 
-    for img_idx in range(source_images.shape[0]):
-        original_image = source_images[img_idx:img_idx+1]
-        with torch.no_grad():
-            z_mean_orig, _ = model.encoder(original_image)
-            fig, axes = plt.subplots(latent_dim, n_traversal_steps,
-                                     figsize=(n_traversal_steps * 1.5, latent_dim * 1.5),
-                                     squeeze=False)
-            fig.suptitle(f"Traversate Latenti per Immagine Test {img_idx+1}", fontsize=10)
-
-            for i in range(latent_dim):
-                z_base_for_dim_i = z_mean_orig.clone()
-                for j, val in enumerate(traversal_values):
-                    z_traversed = z_base_for_dim_i.clone()
-                    z_traversed[0, i] = val
-                    reconstructed_logits = model.decoder(z_traversed)
-                    reconstructed_image = torch.sigmoid(reconstructed_logits)
-                    ax = axes[i, j]
-                    ax.imshow(reconstructed_image.cpu().squeeze().numpy(), cmap='gray')
-                    ax.axis('off')
-                    if i == 0:
-                        ax.set_title(f"{val:.1f}", fontsize=8)
-                axes[i, 0].text(-10, axes[i, 0].get_images()[0].get_array().shape[0]//2, f"z_{i}",
-                                va='center', ha='right', fontsize=8, rotation=0)
-
-            plt.tight_layout(rect=[0, 0.03, 1, 0.97])
-            save_path = output_dir / f"{filename_prefix}{img_idx+1}.png"
+    for img_idx in range(len(source_images)):
+        for dim in range(latent_dim):
+            fig, axes = plt.subplots(1, n_traversal_steps, figsize=(n_traversal_steps * 2, 2))
+            axes = axes.flatten() if n_traversal_steps > 1 else [axes]
+            traversal_values = torch.linspace(traverse_range[0], traverse_range[1], n_traversal_steps, device=device)
+            
+            for step, value in enumerate(traversal_values):
+                z_traversal = z[img_idx:img_idx+1].clone()
+                z_traversal[0, dim] = value
+                with torch.no_grad():
+                    recon_logits = model.decoder(z_traversal)
+                    recon_image = torch.sigmoid(recon_logits)
+                axes[step].imshow(recon_image[0].cpu().squeeze().numpy(), cmap='gray')
+                axes[step].set_title(f'z[{dim}]={value:.2f}')
+                axes[step].axis('off')
+            
+            plt.tight_layout()
+            save_path = output_dir / f"{filename_prefix}{img_idx}_dim{dim}.png"
             try:
                 plt.savefig(save_path)
-                print(f"Griglia di traversata per immagine {img_idx+1} salvata in: {save_path}")
+                print(f"Traversata salvata in: {save_path}")
             except Exception as e:
-                print(f"Errore durante il salvataggio della griglia di traversata: {e}")
+                print(f"Errore durante il salvataggio della traversata: {e}")
             plt.close(fig)
 
 def compute_mig(model, dataloader, n_samples=1000, device='cpu'):
@@ -167,6 +157,7 @@ def get_accelerator():
     return "cpu"
 
 def run_visualizations(model, dataloader, config, output_dir, device):
+    """Esegue tutte le visualizzazioni (ricostruzioni e traversate latenti)."""
     output_dir = Path(output_dir)
     model.eval()
     model.to(device)
@@ -174,10 +165,12 @@ def run_visualizations(model, dataloader, config, output_dir, device):
     # Ricostruzioni
     recon_dir = output_dir / "reconstructions"
     recon_dir.mkdir(parents=True, exist_ok=True)
-    visualize_reconstructions(
-        model, dataloader, n_images=config.n_reconstruction_images, device=device,
-        output_dir=recon_dir, output_filename=f"reconstructions_ep{model.current_epoch or 'final'}.png"
-    )
+    images = get_random_images(dataloader, config.n_reconstruction_images, device)
+    if images is not None:
+        visualize_reconstructions(
+            model, images, n_images=len(images), device=device,
+            output_dir=recon_dir, output_filename=f"reconstructions_ep{model.current_epoch or 'final'}.png"
+        )
 
     # Traversate latenti
     traversal_dir = output_dir / "static_traversals"
