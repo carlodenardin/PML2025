@@ -1,8 +1,8 @@
 class ExperimentConfig:
     # Dataset
     data_dir: str = "data/dsprites"
-    batch_size: int = 16
-    num_workers: int = 2
+    batch_size: int = 512
+    num_workers: int = 8
     train_val_test_split: list = [0.7, 0.15, 0.15]
 
     # Model
