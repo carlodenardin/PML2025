@@ -18,5 +18,5 @@ GAMMA_VALUES="1 2 4 8 16 32 64"
 for gamma_value in $GAMMA_VALUES
 do
   echo "Running Factor VAE (Gamma = $gamma_value)..."
-  python train.py --model_type factor_vae --seed 1234 --gamma $beta_value
+  python train.py --model_type factor_vae --seed 1234 --gamma $gamma_value
 done
