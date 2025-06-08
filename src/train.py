@@ -4,7 +4,7 @@ import pytorch_lightning as pl
 from pytorch_lightning.callbacks import ModelCheckpoint, EarlyStopping
 from pytorch_lightning.loggers import TensorBoardLogger
 from pathlib import Path
-from config import *
+from ..config import *
 from dataset import DSpritesDataModule
 from models.beta_vae import BetaVAE
 from models.factor_vae import FactorVAE
