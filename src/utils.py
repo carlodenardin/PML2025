@@ -1,111 +1,55 @@
 import torch
 import matplotlib.pyplot as plt
 import numpy as np
-import os
 from pathlib import Path
+import re
 import random
-import imageio
 from sklearn.metrics import mutual_info_score
+from config import *
 
 def get_random_images(dataloader, n_images, device):
-    """Raccoglie n_images casuali dal dataloader e le trasferisce al device."""
-    all_images = []
-    num_batches = (n_images + dataloader.batch_size - 1) // dataloader.batch_size
-    for i, batch in enumerate(dataloader):
-        if isinstance(batch, (list, tuple)):
-            images = batch[0]
-        else:
-            images = batch
-        all_images.append(images)
-        if i + 1 >= num_batches:
-            break
-    if not all_images:
-        print("Nessuna immagine caricata dal dataloader.")
-        return None
-    all_images = torch.cat(all_images, dim=0)
-    n_available = len(all_images)
-    indices = random.sample(range(n_available), min(n_images, n_available))
-    return all_images[indices].to(device)
+    random.seed(SEED)
+    first_batch = next(iter(dataloader))
+    if isinstance(first_batch, (list, tuple)):
+        images = first_batch[0]
+    else:
+        images = first_batch
+    batch_size = images.shape[0]
+    indices = random.sample(range(batch_size), n_images)
+    selected_images = images[indices]
+    return selected_images.to(device)
 
-def visualize_reconstructions(model, dataloader, n_images=10, device='cpu',
-                              output_dir="reconstruction_images",
-                              output_filename="reconstructions.png"):
-    """Visualizza e salva le ricostruzioni delle immagini."""
-    model.eval()
-    model.to(device)
-    output_dir = Path(output_dir)
-    output_dir.mkdir(parents=True, exist_ok=True)
+def save_reconstructions(
+    model,
+    dataloader,
+    device: str,
+    result_dir: str,
+    output_filename: str = "reconstructions.png"
+):
+    result_dir = Path(result_dir)
+    result_dir.mkdir(parents = True, exist_ok = True)
+    save_path = result_dir / output_filename
 
-    selected_images = get_random_images(dataloader, n_images, device)
-    if selected_images is None:
-        return
+    selected_images = get_random_images(dataloader, 5, device)
 
     with torch.no_grad():
         mean, logvar = model.encoder(selected_images)
-        z = model._reparameterize(mean, logvar) if hasattr(model, '_reparameterize') else mean
+        z = model._reparameterize(mean, logvar)
         reconstructed_logits = model.decoder(z)
         reconstructed_images = torch.sigmoid(reconstructed_logits)
 
-    fig, axes = plt.subplots(len(selected_images), 2, figsize=(4, len(selected_images) * 2), squeeze=False)
+    fig, axes = plt.subplots(len(selected_images), 2, figsize = (4, len(selected_images) * 2), squeeze = False)
     for i in range(len(selected_images)):
         axes[i, 0].imshow(selected_images[i].cpu().squeeze().numpy(), cmap='gray')
-        axes[i, 0].set_title(f"Originale {i+1}")
+        axes[i, 0].set_title(f"Original {i + 1}")
         axes[i, 0].axis('off')
         axes[i, 1].imshow(reconstructed_images[i].cpu().squeeze().numpy(), cmap='gray')
-        axes[i, 1].set_title(f"Ricostruita {i+1}")
+        axes[i, 1].set_title(f"Reconstructed {i + 1}")
         axes[i, 1].axis('off')
 
     plt.tight_layout()
-    save_path = output_dir / output_filename
-    try:
-        plt.savefig(save_path)
-        print(f"Immagine delle ricostruzioni salvata in: {save_path}")
-    except Exception as e:
-        print(f"Errore durante il salvataggio delle ricostruzioni: {e}")
+    plt.savefig(save_path)
     plt.close(fig)
-
-def save_individual_latent_traversal_grids(model, source_images, n_images_to_show=4, n_traversal_steps=10, traverse_range=(-2.0, 2.0), device='cpu', output_dir="traversal_images", filename_prefix="traversal"):
-    """Salva immagini di traversate latenti per ogni immagine sorgente e dimensione latente."""
-    model.eval()
-    model.to(device)
-    output_dir = Path(output_dir)
-    output_dir.mkdir(parents=True, exist_ok=True)
-
-    if source_images is None:
-        print("Nessuna immagine sorgente fornita.")
-        return
-
-    source_images = source_images[:n_images_to_show].to(device)  # Usa immagini fornite direttamente
-    latent_dim = model.latent_dim if hasattr(model, 'latent_dim') else source_images.shape[1]
-    
-    with torch.no_grad():
-        mean, logvar = model.encoder(source_images)
-        z = model._reparameterize(mean, logvar) if hasattr(model, '_reparameterize') else mean
-
-    for img_idx in range(len(source_images)):
-        for dim in range(latent_dim):
-            fig, axes = plt.subplots(1, n_traversal_steps, figsize=(n_traversal_steps * 2, 2))
-            axes = axes.flatten() if n_traversal_steps > 1 else [axes]
-            traversal_values = torch.linspace(traverse_range[0], traverse_range[1], n_traversal_steps, device=device)
-            
-            for step, value in enumerate(traversal_values):
-                z_traversal = z[img_idx:img_idx+1].clone()
-                z_traversal[0, dim] = value
-                with torch.no_grad():
-                    recon_logits = model.decoder(z_traversal)
-                    recon_image = torch.sigmoid(recon_logits)
-                axes[step].imshow(recon_image[0].cpu().squeeze().numpy(), cmap='gray')
-                axes[step].set_title(f'z[{dim}]={value:.2f}')
-                axes[step].axis('off')
-            
-            plt.tight_layout()
-            save_path = output_dir / f"{filename_prefix}{img_idx}_dim{dim}.png"
-            try:
-                plt.savefig(save_path)
-                print(f"Traversata salvata in: {save_path}")
-            except Exception as e:
-                print(f"Errore durante il salvataggio della traversata: {e}")
-            plt.close(fig)
 
 def compute_mig(model, dataloader, n_samples=1000, device='cpu'):
     """Calcola il Mutual Information Gap (MIG) per valutare il disentanglement."""
@@ -156,28 +100,27 @@ def get_accelerator():
         pass
     return "cpu"
 
-def run_visualizations(model, dataloader, config, output_dir, device):
-    output_dir = Path(output_dir)
-    model.eval()
-    model.to(device)
+from pytorch_lightning.callbacks import Callback
 
-    # Ricostruzioni
-    recon_dir = output_dir / "reconstructions"
-    recon_dir.mkdir(parents=True, exist_ok=True)
-    visualize_reconstructions(
-        model, dataloader, n_images=config.n_reconstruction_images, device=device,
-        output_dir=recon_dir, output_filename=f"reconstructions_ep{model.current_epoch or 'final'}.png"
-    )
+class MIG(Callback):
+    """
+    Callback per calcolare il MIG score alla fine di ogni epoca di validazione.
+    """
+    def on_validation_epoch_end(self, trainer, pl_module):
+        """Chiamato alla fine dell'epoca di validazione."""
+        val_dataloader = trainer.datamodule.val_dataloader()
+        device = pl_module.device
+        mig_score = compute_mig(pl_module, val_dataloader, device=device)
+        pl_module.log('val_mig', mig_score, prog_bar=True)
 
-    # Traversate latenti
-    traversal_dir = output_dir / "static_traversals"
-    traversal_dir.mkdir(parents=True, exist_ok=True)
-    images = get_random_images(dataloader, config.n_images_for_static_traversals, device)
-    if images is not None:
-        save_individual_latent_traversal_grids(
-            model, images, n_images_to_show=len(images),
-            n_traversal_steps=config.n_traversal_steps_per_dim,
-            traverse_range=(config.traversal_range_min, config.traversal_range_max),
-            device=device, output_dir=traversal_dir,
-            filename_prefix=f"static_traversal_ep{model.current_epoch or 'final'}_img_"
-        )
+def get_folder_name(checkpoint_path: str):
+    path = Path(checkpoint_path)
+    return path.parent.name
+
+def get_seed(checkpoint_path: str):
+    folder_name = get_folder_name(checkpoint_path)
+    match = re.search(r"seed_(\d+)", folder_name)
+    
+    if match:
+        seed_str = match.group(1)
+        return folder_name, int(seed_str)

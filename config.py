@@ -1,0 +1,32 @@
+# DIRECTORY SETTINGS
+RESULTS_DIR_DSPRITES = "results/dsprites"
+CHECKPOINTS_DIR_DISPRITES = "checkpoints/dsprites"
+LOGS_DIR_DISPRITES = "logs/dsprites"
+
+# DATASET DSPRITES SETTINGS
+URL_DSPRITES = "https://github.com/deepmind/dsprites-dataset/blob/master/dsprites_ndarray_co1sh3sc6or40x32y32_64x64.npz?raw=true"
+FILENAME_DSPRITES = "dsprites_ndarray_co1sh3sc6or40x32y32_64x64.npz"
+DIR_DSPRITES = "data/dsprites"
+
+# EXPERIMENT SETTINGS
+SEED = 1234
+BATCH_SIZE = 16
+NUM_WORKERS = 2
+TRAIN_VAL_TEST_SPLIT = [0.01, 0.01, 0.98]
+EPOCHS = 100
+PATIENCE = 5
+PRECISION = "16-mixed"
+MONITOR_METRIC = "val_loss"
+
+# MODELS COMMON SETTINGS
+LATENT_DIM = 10
+LR_VAE = 1e-4
+
+# BETA VAE SETTINGS
+BETA = 1.0
+
+# FACTOR VAE SETTINGS
+GAMMA = 1.0
+LR_DISC = 1e-4
+HIDDEN_UNITS_D = 1000
+NUM_LAYERS_D = 6

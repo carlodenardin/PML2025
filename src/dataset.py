@@ -1,91 +1,142 @@
-import os
 from pathlib import Path
-import numpy as np
-import torch
-from torch.utils.data import Dataset, DataLoader, random_split
-from torchvision import transforms
-import requests
-from tqdm import tqdm
-import pytorch_lightning as pl
+from typing import Optional, List, Tuple, Callable
 
-DSPRITES_URL = "https://github.com/deepmind/dsprites-dataset/blob/master/dsprites_ndarray_co1sh3sc6or40x32y32_64x64.npz?raw=true"
-DSPRITES_FILENAME = "dsprites_ndarray_co1sh3sc6or40x32y32_64x64.npz"
+import numpy as np
+import pytorch_lightning as pl
+import requests
+import torch
+from torch.utils.data import DataLoader, Dataset, random_split
+from torchvision import transforms
+from tqdm import tqdm
+
+from config import *
 
 class DSpritesDataset(Dataset):
-    """dSprites dataset loader for disentanglement tasks."""
-    def __init__(self, root_dir="../data/dsprites", download = True, transform = None, return_latents = False):
-        self.root_dir = Path(root_dir)
-        self.filepath = self.root_dir / DSPRITES_FILENAME
+
+    def __init__(
+        self,
+        data_dir: str,
+        return_latents: bool,
+        transform: Optional[Callable] = None
+    ):
+        super().__init__()
+        self.data_dir = Path(data_dir)
+        self.filepath = self.data_dir / FILENAME_DSPRITES
         self.transform = transform if transform is not None else transforms.ToTensor()
         self.return_latents = return_latents
 
-        if not self.root_dir.exists():
-            self.root_dir.mkdir(parents = True)
+        self.data_dir.mkdir(parents = True, exist_ok = True)
 
-        if download and not self.filepath.exists():
+        if not self.filepath.exists():
+            print(f"DSprites not found. Downloading from: {URL_DSPRITES}...")
             self._download()
 
-        dataset_zip = np.load(self.filepath, allow_pickle = True, encoding = 'bytes')
-        self.imgs = dataset_zip['imgs']
-        self.latents_values = dataset_zip['latents_values']
+        with np.load(self.filepath, allow_pickle = True, encoding = 'bytes') as dataset_zip:
+            self.imgs = dataset_zip['imgs']
+            self.latents_values = dataset_zip['latents_values']
+        
+    def _download(self) -> None:
+        try:
+            with requests.get(URL_DSPRITES, stream=True) as response:
+                response.raise_for_status()
+                total_size = int(response.headers.get('content-length', 0))
 
-    def _download(self):
-        print(f"Downloading dSprites dataset to {self.filepath}...")
-        response = requests.get(DSPRITES_URL, stream = True)
-        total_size_in_bytes = int(response.headers.get('content-length', 0))
+                with open(self.filepath, 'wb') as file, tqdm(
+                    total=total_size, unit='iB', unit_scale=True, desc="Downloading dSprites"
+                ) as progress_bar:
+                    for data in response.iter_content(chunk_size=1024):
+                        file.write(data)
+                        progress_bar.update(len(data))
+        except requests.exceptions.RequestException as e:
+            print(f"DSprites not downloaded. Error: {e}")
+            raise
 
-        progress_bar = tqdm(total = total_size_in_bytes, unit = 'iB', unit_scale = True)
-        with open(self.filepath, 'wb') as file:
-            for data in response.iter_content(1024):
-                progress_bar.update(len(data))
-                file.write(data)
-        progress_bar.close()
-
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self.imgs)
 
-    def __getitem__(self, idx):
+    def __getitem__(self, idx: int):
         image = self.imgs[idx].astype(np.float32)
+        
         if self.transform:
             image = self.transform(image)
+
         if self.return_latents:
-            latents = torch.tensor(self.latents_values[idx], dtype=torch.float32)
+            latents = torch.tensor(self.latents_values[idx], dtype = torch.float32)
             return image, latents
+        
         return image
 
+
 class DSpritesDataModule(pl.LightningDataModule):
-    """PyTorch Lightning DataModule for dSprites dataset."""
-    def __init__(self, data_dir: str = "../data/dsprites", batch_size: int = 16, num_workers: int = 2, train_val_test_split = [0.7, 0.15, 0.15]):
+    def __init__(
+        self,
+        data_dir: str,
+        batch_size: int,
+        num_workers: int,
+        train_val_test_split: List[float]
+    ):
         super().__init__()
         self.data_dir = data_dir
         self.batch_size = batch_size
         self.num_workers = num_workers
-
         self.train_val_test_split = train_val_test_split
+        
         self.transform = transforms.Compose([transforms.ToTensor()])
-        self.dsprites_train = self.dsprites_val = self.dsprites_test = None
 
-    def prepare_data(self):
-        DSpritesDataset(self.data_dir, download = True, return_latents = True)
+        self.dsprites_train: Optional[Dataset] = None
+        self.dsprites_val: Optional[Dataset] = None
+        self.dsprites_test: Optional[Dataset] = None
 
-    def setup(self, stage=None):
-        if not self.dsprites_train and not self.dsprites_val and not self.dsprites_test:
-            dsprites_full = DSpritesDataset(self.data_dir, download = False, transform = self.transform, return_latents = True)
+    def prepare_data(self) -> None:
+
+        DSpritesDataset(self.data_dir, return_latents = True)
+
+    def setup(self, stage: Optional[str] = None) -> None:
+        if self.dsprites_train is None:
+            dsprites_full = DSpritesDataset(
+                data_dir=self.data_dir,
+                transform=self.transform,
+                return_latents=True
+            )
             total_len = len(dsprites_full)
             train_len = int(self.train_val_test_split[0] * total_len)
             val_len = int(self.train_val_test_split[1] * total_len)
             test_len = total_len - train_len - val_len
+
             self.dsprites_train, self.dsprites_val, self.dsprites_test = random_split(
-                dsprites_full, [train_len, val_len, test_len],
-                generator=torch.Generator().manual_seed(42)
+                dsprites_full,
+                [train_len, val_len, test_len],
+                generator=torch.Generator().manual_seed(SEED)
             )
-            print(f"Dataset split: Train={len(self.dsprites_train)}, Val={len(self.dsprites_val)}, Test={len(self.dsprites_test)}")
+            print(f"Dataset: Train = {len(self.dsprites_train)}, Val = {len(self.dsprites_val)}, Test = {len(self.dsprites_test)}")
 
-    def train_dataloader(self):
-        return DataLoader(self.dsprites_train, batch_size = self.batch_size, shuffle = True, num_workers = self.num_workers, pin_memory = True)
+    def train_dataloader(self) -> DataLoader:
+        return DataLoader(
+            self.dsprites_train,
+            batch_size = self.batch_size,
+            shuffle = True,
+            num_workers = self.num_workers,
+            pin_memory = True,
+            persistent_workers = True
+        )
 
-    def val_dataloader(self):
-        return DataLoader(self.dsprites_val, batch_size = self.batch_size, shuffle = False, num_workers = self.num_workers, pin_memory = True)
+    def val_dataloader(self) -> DataLoader:
+        return DataLoader(
+            self.dsprites_val,
+            batch_size = self.batch_size,
+            shuffle = False,
+            num_workers = self.num_workers,
+            pin_memory = True,
+            persistent_workers = True
+        )
 
-    def test_dataloader(self):
-        return DataLoader(self.dsprites_test, batch_size = self.batch_size, shuffle = False, num_workers=  self.num_workers, pin_memory = True)
+    def test_dataloader(self) -> DataLoader:
+        return DataLoader(
+            self.dsprites_test,
+            batch_size = self.batch_size,
+            shuffle = False,
+            num_workers = self.num_workers,
+            pin_memory = True,
+            persistent_workers = True
+        )
+

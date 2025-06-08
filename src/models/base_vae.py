@@ -5,10 +5,10 @@ import pytorch_lightning as pl
 from .shared_networks import Encoder, Decoder
 
 class BaseVAE(pl.LightningModule, ABC):
-    """Base class for VAE models, providing common encoder/decoder functionality."""
     def __init__(self, latent_dim, lr_vae):
         super().__init__()
         self.save_hyperparameters()
+        
         self.latent_dim = latent_dim
         self.lr_vae = lr_vae
         self.encoder = Encoder(latent_dim)

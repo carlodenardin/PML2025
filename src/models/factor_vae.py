@@ -2,7 +2,7 @@ import torch
 import torch.nn.functional as F
 import pytorch_lightning as pl
 from .base_vae import BaseVAE
-from .shared_networks import Encoder, Decoder, Discriminator
+from .shared_networks import Discriminator
 
 class FactorVAE(BaseVAE):
     """FactorVAE model for disentangled representation learning, extending VAE with a TC loss."""
@@ -78,7 +78,7 @@ class FactorVAE(BaseVAE):
         recon_loss, kl_div_vae = self._compute_losses(x, x_recon_logits, mean, logvar)
         D_z_logits = self.discriminator(z)
         tc_loss_val_term = D_z_logits.mean()
-        val_vae_loss = recon_loss + kl_div_vae + self.gamma * tc_loss_val_term
+        val_loss = recon_loss + kl_div_vae + self.gamma * tc_loss_val_term
 
         z_permuted = self._permute_dims(z.detach())
         D_fake_logits = self.discriminator(z_permuted)
@@ -87,12 +87,12 @@ class FactorVAE(BaseVAE):
         val_disc_loss = 0.5 * (loss_d_real_val + loss_d_fake_val)
 
         self.log_dict({
-            'val_vae_loss': val_vae_loss,
+            'val_loss': val_loss,
             'val_recon_loss': recon_loss,
             'val_kl_div_vae': kl_div_vae,
             'val_disc_loss': val_disc_loss
         })
-        return val_vae_loss
+        return val_loss
 
     def configure_optimizers(self):
         opt_vae = torch.optim.Adam(list(self.encoder.parameters()) + list(self.decoder.parameters()),
