@@ -4,11 +4,11 @@ import pytorch_lightning as pl
 from pytorch_lightning.callbacks import ModelCheckpoint, EarlyStopping
 from pytorch_lightning.loggers import TensorBoardLogger
 from pathlib import Path
-from ..config import *
-from dataset import DSpritesDataModule
-from models.beta_vae import BetaVAE
-from models.factor_vae import FactorVAE
-from utils import get_accelerator, MIG
+from config import *
+from src.dataset import DSpritesDataModule
+from src.models.beta_vae import BetaVAE
+from src.models.factor_vae import FactorVAE
+from src.utils import get_accelerator, MIG
 
 def parse_args():
     parser = argparse.ArgumentParser()

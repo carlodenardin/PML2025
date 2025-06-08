@@ -3,10 +3,10 @@ import argparse
 import torch
 from pathlib import Path
 import pytorch_lightning as pl
-from dataset import DSpritesDataModule
+from src.dataset import DSpritesDataModule
 from src.models.beta_vae import BetaVAE
-from models.factor_vae import FactorVAE
-from utils import save_reconstructions, compute_mig, get_accelerator, get_seed
+from src.models.factor_vae import FactorVAE
+from src.utils import save_reconstructions, compute_mig, get_accelerator, get_seed
 from config import *
 
 def parse_args():
