@@ -75,88 +75,43 @@ def save_reconstructions(
     plt.savefig(save_path)
     plt.close(fig)
 
-def compute_mig(model: torch.nn.Module, dataloader, device: str, n_samples: int = 10000) -> float:
-    """
-    Calculates the Mutual Information Gap (MIG) in a robust and paper-faithful way.
+def compute_mig(model, dataloader, device, n_samples = 10000):
+    model.eval().to(device)
+    latents, factors = [], []
 
-    MIG measures the degree of disentanglement by evaluating, for each
-    ground-truth factor of variation, how much a single latent dimension
-    is more informative than all others.
-
-    Args:
-        model (torch.nn.Module): The trained VAE model.
-        dataloader (DataLoader): The DataLoader for the test set (containing ground-truth latents).
-        device (str): The device to run computations on ('cpu', 'cuda', etc.).
-        n_samples (int): The number of samples to use for the estimation.
-
-    Returns:
-        float: The calculated MIG score, normalized by the entropy of the factors.
-    """
-    model.eval()
-    model.to(device)
-    
-    # --- Step 1: Collect latent samples from the model and ground-truth factors ---
-    all_latents = []
-    all_factors = []
-    
-    num_batches_processed = 0
-    for batch in dataloader:
-        images, factor_values = batch[0], batch[1]
+    # Raccogli latenti e fattori
+    for images, factor_vals in dataloader:
         images = images.to(device)
-        
         with torch.no_grad():
             mean, _ = model.encoder(images)
-            all_latents.append(mean.cpu().numpy())
-            all_factors.append(factor_values.cpu().numpy())
-        
-        num_batches_processed += 1
-        # Ensure we don't iterate over the whole dataset if not needed
-        if (num_batches_processed * dataloader.batch_size) >= n_samples:
+        latents.append(mean.cpu().numpy())
+        factors.append(factor_vals.cpu().numpy())
+        if len(latents) * dataloader.batch_size >= n_samples:
             break
 
-    latents = np.concatenate(all_latents, axis=0)[:n_samples]
-    factors = np.concatenate(all_factors, axis=0)[:n_samples]
-    
-    n_latents = latents.shape[1]
-    n_factors = factors.shape[1]
-    
-    # --- Step 2: Estimate the Mutual Information (MI) matrix ---
+    latents = np.concatenate(latents, axis=0)[:n_samples]
+    factors = np.concatenate(factors, axis=0)[:n_samples]
+
+    n_latents, n_factors = latents.shape[1], factors.shape[1]
     mi_matrix = np.zeros((n_latents, n_factors))
     entropies = np.zeros(n_factors)
 
     for j in range(n_factors):
-        # Use the raw, discrete ground-truth factors directly.
-        # This is more accurate than re-discretizing them.
-        factor_discrete = factors[:, j]
+        unique_vals = len(np.unique(factors[:, j]))
+        bins = unique_vals if unique_vals <= 4 else 20
+        factor_vals = factors[:, j].astype(int) if unique_vals <= 4 else np.digitize(
+            factors[:, j], np.linspace(factors[:, j].min(), factors[:, j].max(), bins))
         
-        # --- Calculate entropy H(v_j) for the normalization term ---
-        # To calculate entropy, we need the probability of each unique factor value.
-        _, counts = np.unique(factor_discrete, return_counts=True)
-        probabilities = counts / len(factor_discrete)
-        entropies[j] = entropy(probabilities, base=2)
-        
+        counts = np.bincount(factor_vals) / len(factor_vals)
+        entropies[j] = entropy(counts, base=2)
+
         for i in range(n_latents):
-            # Discretize the continuous latent dimension into 20 bins
-            latent_discrete = np.digitize(latents[:, i], np.linspace(latents[:, i].min(), latents[:, i].max(), 20))
-            
-            # Calculate the mutual information I(z_i; v_j)
-            mi_matrix[i, j] = mutual_info_score(latent_discrete, factor_discrete)
+            latent_vals = np.digitize(latents[:, i], np.linspace(latents[:, i].min(), latents[:, i].max(), 20))
+            mi_matrix[i, j] = mutual_info_score(latent_vals, factor_vals)
 
-    # --- Step 3: Calculate the final MIG score ---
-    # Sort the MI scores for each factor (column) in descending order
     sorted_mi = np.sort(mi_matrix, axis=0)[::-1]
-
-    # Calculate the "gap" between the MI of the most informative and second-most informative latent
-    gaps = sorted_mi[0, :] - sorted_mi[1, :]
-    
-    # Normalize the gaps by the factor's entropy.
-    # Handle the case where entropy is 0 (for constant factors) to avoid division by zero.
-    normalized_gaps = np.divide(gaps, entropies, out=np.zeros_like(gaps), where=entropies > 1e-12)
-    
-    # The final MIG score is the mean of the normalized gaps over all factors
-    mig_score = np.mean(normalized_gaps)
-    
-    return float(mig_score)
+    mig_scores = (sorted_mi[0] - sorted_mi[1]) / np.maximum(entropies, 1e-10)
+    return np.mean(mig_scores[np.isfinite(mig_scores)])
 
 """
 def compute_mig(model, dataloader, n_samples, device):
