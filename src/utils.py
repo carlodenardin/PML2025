@@ -5,7 +5,21 @@ from pathlib import Path
 import re
 import random
 from sklearn.metrics import mutual_info_score
+from scipy.stats import entropy
 from config import *
+from pytorch_lightning.callbacks import Callback
+
+def get_folder_name(checkpoint_path: str):
+    path = Path(checkpoint_path)
+    return path.parent.name
+
+def get_seed(checkpoint_path: str):
+    folder_name = get_folder_name(checkpoint_path)
+    match = re.search(r"seed_(\d+)", folder_name)
+    
+    if match:
+        seed_str = match.group(1)
+        return folder_name, int(seed_str)
 
 def get_random_images(dataloader, n_images, device):
     random.seed(SEED)
@@ -18,6 +32,16 @@ def get_random_images(dataloader, n_images, device):
     indices = random.sample(range(batch_size), n_images)
     selected_images = images[indices]
     return selected_images.to(device)
+
+def get_accelerator():
+    if torch.cuda.is_available():
+        return "cuda"
+    try:
+        if torch.backends.mps.is_available() and torch.backends.mps.is_built():
+            return "mps"
+    except AttributeError:
+        pass
+    return "cpu"
 
 def save_reconstructions(
     model,
@@ -51,8 +75,39 @@ def save_reconstructions(
     plt.savefig(save_path)
     plt.close(fig)
 
-def compute_mig(model, dataloader, n_samples=1000, device='cpu'):
-    """Calcola il Mutual Information Gap (MIG) per valutare il disentanglement."""
+def compute_mig(model, dataloader, device):
+    model.eval().to(device)
+    latents, factors = [], []
+
+    for batch in dataloader:
+        images, factor_values = batch
+        images = images.to(device)
+        with torch.no_grad():
+            mean, _ = model.encoder(images)
+            latents.append(mean.cpu().numpy())
+            factors.append(factor_values.cpu().numpy())
+
+    latents = np.concatenate(latents, axis=0)
+    factors = np.concatenate(factors, axis=0)
+
+    n_latents, n_factors = latents.shape[1], factors.shape[1]
+    mi_matrix = np.zeros((n_latents, n_factors))
+    entropies = np.zeros(n_factors)
+
+    for i in range(n_latents):
+        for j in range(n_factors):
+            latent_vals = np.digitize(latents[:, i], np.linspace(latents[:, i].min(), latents[:, i].max(), 20))
+            factor_vals = np.digitize(factors[:, j], np.linspace(factors[:, j].min(), factors[:, j].max(), 20))
+            mi_matrix[i, j] = mutual_info_score(latent_vals, factor_vals)
+            if i == 0:
+                counts = np.bincount(factor_vals) / len(factor_vals)
+                entropies[j] = entropy(counts, 2)
+    
+    sorted_mi = np.sort(mi_matrix, axis = 0)[::-1]
+    mig_scores = (sorted_mi[0] - sorted_mi[1]) / np.maximum(entropies, 1e-10)
+    return np.mean(mig_scores[np.isfinite(mig_scores)])
+"""
+def compute_mig(model, dataloader, n_samples, device):
     model.eval()
     model.to(device)
     latents, factors = [], []
@@ -89,38 +144,11 @@ def compute_mig(model, dataloader, n_samples=1000, device='cpu'):
     sorted_mi = np.sort(mi_matrix, axis=0)[::-1]
     mig = (sorted_mi[0] - sorted_mi[1]).mean() / sorted_mi[0].mean() if sorted_mi[0].mean() > 0 else 0
     return mig
-
-def get_accelerator():
-    if torch.cuda.is_available():
-        return "cuda"
-    try:
-        if torch.backends.mps.is_available() and torch.backends.mps.is_built():
-            return "mps"
-    except AttributeError:
-        pass
-    return "cpu"
-
-from pytorch_lightning.callbacks import Callback
+"""
 
 class MIG(Callback):
-    """
-    Callback per calcolare il MIG score alla fine di ogni epoca di validazione.
-    """
     def on_validation_epoch_end(self, trainer, pl_module):
-        """Chiamato alla fine dell'epoca di validazione."""
         val_dataloader = trainer.datamodule.val_dataloader()
         device = pl_module.device
-        mig_score = compute_mig(pl_module, val_dataloader, device=device)
-        pl_module.log('val_mig', mig_score, prog_bar=True)
-
-def get_folder_name(checkpoint_path: str):
-    path = Path(checkpoint_path)
-    return path.parent.name
-
-def get_seed(checkpoint_path: str):
-    folder_name = get_folder_name(checkpoint_path)
-    match = re.search(r"seed_(\d+)", folder_name)
-    
-    if match:
-        seed_str = match.group(1)
-        return folder_name, int(seed_str)
+        mig_score = compute_mig(pl_module, val_dataloader, device = device)
+        pl_module.log('val_mig', mig_score, prog_bar = True)
