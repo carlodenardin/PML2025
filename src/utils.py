@@ -75,37 +75,44 @@ def save_reconstructions(
     plt.savefig(save_path)
     plt.close(fig)
 
-def compute_mig(model, dataloader, device):
+def compute_mig(model, dataloader, device, n_samples = 10000):
     model.eval().to(device)
     latents, factors = [], []
 
-    for batch in dataloader:
-        images, factor_values = batch
+    # Raccogli latenti e fattori
+    for images, factor_vals in dataloader:
         images = images.to(device)
         with torch.no_grad():
             mean, _ = model.encoder(images)
-            latents.append(mean.cpu().numpy())
-            factors.append(factor_values.cpu().numpy())
+        latents.append(mean.cpu().numpy())
+        factors.append(factor_vals.cpu().numpy())
+        if len(latents) * dataloader.batch_size >= n_samples:
+            break
 
-    latents = np.concatenate(latents, axis=0)
-    factors = np.concatenate(factors, axis=0)
+    latents = np.concatenate(latents, axis=0)[:n_samples]
+    factors = np.concatenate(factors, axis=0)[:n_samples]
 
     n_latents, n_factors = latents.shape[1], factors.shape[1]
     mi_matrix = np.zeros((n_latents, n_factors))
     entropies = np.zeros(n_factors)
 
-    for i in range(n_latents):
-        for j in range(n_factors):
+    for j in range(n_factors):
+        unique_vals = len(np.unique(factors[:, j]))
+        bins = unique_vals if unique_vals <= 4 else 20
+        factor_vals = factors[:, j].astype(int) if unique_vals <= 4 else np.digitize(
+            factors[:, j], np.linspace(factors[:, j].min(), factors[:, j].max(), bins))
+        
+        counts = np.bincount(factor_vals) / len(factor_vals)
+        entropies[j] = entropy(counts, base=2)
+
+        for i in range(n_latents):
             latent_vals = np.digitize(latents[:, i], np.linspace(latents[:, i].min(), latents[:, i].max(), 20))
-            factor_vals = np.digitize(factors[:, j], np.linspace(factors[:, j].min(), factors[:, j].max(), 20))
             mi_matrix[i, j] = mutual_info_score(latent_vals, factor_vals)
-            if i == 0:
-                counts = np.bincount(factor_vals) / len(factor_vals)
-                entropies[j] = entropy(counts, 2)
-    
-    sorted_mi = np.sort(mi_matrix, axis = 0)[::-1]
+
+    sorted_mi = np.sort(mi_matrix, axis=0)[::-1]
     mig_scores = (sorted_mi[0] - sorted_mi[1]) / np.maximum(entropies, 1e-10)
     return np.mean(mig_scores[np.isfinite(mig_scores)])
+
 """
 def compute_mig(model, dataloader, n_samples, device):
     model.eval()
