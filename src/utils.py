@@ -75,7 +75,7 @@ def save_reconstructions(
     plt.savefig(save_path)
     plt.close(fig)
 
-def compute_mig(model: torch.nn.Module, dataloader: DataLoader, device: str, n_samples: int = 10000) -> float:
+def compute_mig(model: torch.nn.Module, dataloader, device: str, n_samples: int = 10000) -> float:
     """
     Calculates the Mutual Information Gap (MIG) in a robust and paper-faithful way.
 
