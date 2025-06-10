@@ -23,7 +23,7 @@ class MPI3DDataset(Dataset):
             print(f"File MPI3D non trovato. Inizio download da: {URL_MPI3D}...")
             self._download()
 
-        dataset_zip = np.load(self.filepath, mmap_mode='r', allow_pickle = True)
+        dataset_zip = np.load(self.filepath, mmap_mode='r')
         
         # See https://github.com/rr-learning/disentanglement_dataset
         factor_dims = (4, 4, 2, 3, 3, 40, 40)
