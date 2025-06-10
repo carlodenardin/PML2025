@@ -45,7 +45,7 @@ def get_accelerator():
 
 def save_reconstructions(
     model,
-    dataloader: DataLoader,
+    dataloader,
     device: str,
     result_dir: str,
     output_filename: str = "reconstructions.png"
