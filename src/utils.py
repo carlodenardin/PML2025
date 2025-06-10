@@ -45,35 +45,65 @@ def get_accelerator():
 
 def save_reconstructions(
     model,
-    dataloader,
+    dataloader: DataLoader,
     device: str,
     result_dir: str,
     output_filename: str = "reconstructions.png"
 ):
+    """
+    Saves a plot of original vs. reconstructed images.
+    This function now handles both grayscale and RGB images.
+    """
     result_dir = Path(result_dir)
-    result_dir.mkdir(parents = True, exist_ok = True)
+    result_dir.mkdir(parents=True, exist_ok=True)
     save_path = result_dir / output_filename
 
+    # Get a small batch of random images
     selected_images = get_random_images(dataloader, 5, device)
+    if selected_images is None:
+        print("Could not generate reconstructions: no images found.")
+        return
 
+    # Generate reconstructions
     with torch.no_grad():
         mean, logvar = model.encoder(selected_images)
-        z = model._reparameterize(mean, logvar)
-        reconstructed_logits = model.decoder(z)
+        # Using the mean for a deterministic reconstruction
+        reconstructed_logits = model.decoder(mean)
         reconstructed_images = torch.sigmoid(reconstructed_logits)
 
-    fig, axes = plt.subplots(len(selected_images), 2, figsize = (4, len(selected_images) * 2), squeeze = False)
+    # Create plot
+    fig, axes = plt.subplots(len(selected_images), 2, figsize=(4, len(selected_images) * 2), squeeze=False)
+    
     for i in range(len(selected_images)):
-        axes[i, 0].imshow(selected_images[i].cpu().squeeze().numpy(), cmap='gray')
+        original_img = selected_images[i].cpu()
+        reconstructed_img = reconstructed_images[i].cpu()
+
+        # --- KEY CHANGE: Handle both Grayscale and RGB images ---
+        if original_img.shape[0] == 1:
+            # Grayscale image (C, H, W) -> (H, W)
+            original_np = original_img.squeeze().numpy()
+            reconstructed_np = reconstructed_img.squeeze().numpy()
+            cmap = 'gray'
+        else:
+            # RGB image (C, H, W) -> (H, W, C)
+            original_np = original_img.permute(1, 2, 0).numpy()
+            reconstructed_np = reconstructed_img.permute(1, 2, 0).numpy()
+            cmap = None # Let matplotlib infer colormap for RGB
+
+        # Plot original
+        axes[i, 0].imshow(original_np, cmap=cmap)
         axes[i, 0].set_title(f"Original {i + 1}")
         axes[i, 0].axis('off')
-        axes[i, 1].imshow(reconstructed_images[i].cpu().squeeze().numpy(), cmap='gray')
+        
+        # Plot reconstructed
+        axes[i, 1].imshow(reconstructed_np, cmap=cmap)
         axes[i, 1].set_title(f"Reconstructed {i + 1}")
         axes[i, 1].axis('off')
 
     plt.tight_layout()
     plt.savefig(save_path)
     plt.close(fig)
+    print(f"Reconstructions saved to {save_path}")
 
 def compute_mig(model, dataloader, device, n_samples = 10000):
     model.eval().to(device)
