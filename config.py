@@ -14,9 +14,10 @@ CHECKPOINTS_DIR_MPI3D = "checkpoints/mpi3d"
 LOGS_DIR_MPI3D = "logs/mpi3d"
 
 # DATASET SETTINGS
-URL_MPI3D = "https://huggingface.co/datasets/waleedgondal/mpi3d/resolve/main/mpi3d_toy.npz"
-FILENAME_MPI3D = "mpi3d_toy.npz"
+URL_MPI3D = "https://huggingface.co/datasets/carlodenardin/dis/blob/main/real3d_complicated_shapes_ordered.npz"
+FILENAME_MPI3D = "real3d_complicated_shapes_ordered.npz"
 DIR_MPI3D = "data/mpi3d"
+SAMPLES_MPI3D = 100000
 
 # EXPERIMENT SETTINGS
 SEED = 19

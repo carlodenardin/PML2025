@@ -23,12 +23,38 @@ class MPI3DDataset(Dataset):
             print(f"File MPI3D non trovato. Inizio download da: {URL_MPI3D}...")
             self._download()
 
-        with np.load(self.filepath) as dataset_zip:
-            images_uint8 = dataset_zip['images']
-            self.images = images_uint8.astype(np.float32) / 255.0
-            self.latents_values = dataset_zip['latents_values']
-        self.lat_sizes = np.array([len(np.unique(self.latents_values[:, i])) for i in range(self.latents_values.shape[1])])
+        dataset_zip = np.load(self.filepath, mmap_mode='r')
+        
+        # See https://github.com/rr-learning/disentanglement_dataset
+        factor_dims = (4, 4, 2, 3, 3, 40, 40)
+        image_dims = (64, 64, 3)
+        full_shape = factor_dims + image_dims
+        
+        images_full_shaped = dataset_zip['images'].reshape(full_shape)
+        
+        num_factors = len(factor_dims)
+        num_total_images = np.prod(factor_dims)
+        
+        indices_grid = np.indices(factor_dims)
+        latents_full = indices_grid.reshape(num_factors, num_total_images).T
+        
+        images_full = images_full_shaped.reshape(num_total_images, *image_dims)
 
+        if SAMPLES_MPI3D is not None and SAMPLES_MPI3D < len(images_full):
+            rng = np.random.RandomState(SEED)
+            indices = rng.permutation(len(images_full))[:SAMPLES_MPI3D]
+            
+            self.images_uint8 = images_full[indices]
+            self.latents_values = latents_full[indices]
+        else:
+            self.images_uint8 = images_full[:]
+            self.latents_values = latents_full[:]
+        
+        self.images = self.images_uint8.astype(np.float32) / 255.0
+        self.lat_sizes = np.array([len(np.unique(self.latents_values[:, i])) for i in range(self.latents_values.shape[1])])
+        print(f"Dataset MPI3D loaded with {len(self.images)} samples.")
+
+        
     def _download(self) -> None:
         try:
             with requests.get(URL_MPI3D, stream=True) as response:
