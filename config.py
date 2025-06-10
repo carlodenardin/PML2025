@@ -17,7 +17,7 @@ LOGS_DIR_MPI3D = "logs/mpi3d"
 URL_MPI3D = "https://huggingface.co/datasets/carlodenardin/dis/resolve/main/real3d_complicated_shapes_ordered.npz"
 FILENAME_MPI3D = "real3d_complicated_shapes_ordered.npz"
 DIR_MPI3D = "data/mpi3d"
-SAMPLES_MPI3D = 250000
+SAMPLES_MPI3D = 100000
 
 # EXPERIMENT SETTINGS
 SEED = 19
