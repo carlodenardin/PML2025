@@ -17,15 +17,15 @@ LOGS_DIR_MPI3D = "logs/mpi3d"
 URL_MPI3D = "https://huggingface.co/datasets/carlodenardin/dis/resolve/main/real3d_complicated_shapes_ordered.npz"
 FILENAME_MPI3D = "real3d_complicated_shapes_ordered.npz"
 DIR_MPI3D = "data/mpi3d"
-SAMPLES_MPI3D = 100000
+SAMPLES_MPI3D = 250000
 
 # EXPERIMENT SETTINGS
 SEED = 19
 BATCH_SIZE = 512
 NUM_WORKERS = 12
 TRAIN_VAL_TEST_SPLIT = [0.8, 0.1, 0.1]
-EPOCHS = 100
-PATIENCE = 3
+EPOCHS = 150
+PATIENCE = 5
 PRECISION = "16-mixed"
 MONITOR_METRIC = "val_loss"
 
