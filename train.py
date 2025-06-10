@@ -6,6 +6,7 @@ from pytorch_lightning.loggers import TensorBoardLogger
 from pathlib import Path
 from config import *
 from src.dataset import DSpritesDataModule
+from src.mpi3d import MPI3DDataModule
 from src.models.beta_vae import BetaVAE
 from src.models.factor_vae import FactorVAE
 from src.utils import get_accelerator, MIG
@@ -27,6 +28,7 @@ def parse_args():
     parser.add_argument('--num_workers', type = int, default = NUM_WORKERS)
     parser.add_argument('--batch_size', type = int, default = BATCH_SIZE)
     parser.add_argument('--train_val_test_split', type = list, default = TRAIN_VAL_TEST_SPLIT)
+    parser.add_argument('--dataset', type=str, default = 'dsprites', choices = ['dsprites', 'mpi3d'])
     
     return parser.parse_args()
 
@@ -44,10 +46,44 @@ def main():
         train_val_test_split = args.train_val_test_split
     )
 
+    if args.dataset == 'dsprites':
+        dm = DSpritesDataModule(
+            data_dir=DIR_DSPRITES,
+            batch_size=args.batch_size,
+            num_workers=args.num_workers,
+            train_val_test_split=args.train_val_test_split
+        )
+        in_channels = 1
+        reconstruction_loss = "bce"
+    elif args.dataset == 'mpi3d':
+        dm = MPI3DDataModule(
+            data_dir = DIR_MPI3D,
+            batch_size = args.batch_size,
+            num_workers = args.num_workers,
+            train_val_test_split = args.train_val_test_split
+        )
+        in_channels = 3
+        reconstruction_loss = "mse"
+    else:
+        raise ValueError(f"Unknown dataset: {args.dataset}")
+
     if args.model_type == 'beta_vae':
-        model = BetaVAE(latent_dim = args.latent_dim, lr = args.lr_vae, beta = args.beta)
-        checkpoints_dir = Path(CHECKPOINTS_DIR_DISPRITES) / args.model_type / f"seed_{args.seed}_beta_{args.beta}"
-        tensorboard_logger = TensorBoardLogger(save_dir = LOGS_DIR_DISPRITES, name = args.model_type, version = f"seed_{args.seed}_beta_{args.beta}")
+        model = BetaVAE(
+            latent_dim = args.latent_dim,
+            lr = args.lr_vae,
+            beta = args.beta,
+            in_channels = in_channels,
+            out_channels = in_channels,
+            rec_loss = reconstruction_loss
+        )
+
+        if args.dataset == 'mpi3d':
+            checkpoints_dir = Path(CHECKPOINTS_DIR_MPI3D) / args.model_type / f"seed_{args.seed}_beta_{args.beta}"
+            tensorboard_logger = TensorBoardLogger(save_dir = LOGS_DIR_MPI3D, name = args.model_type, version = f"seed_{args.seed}_beta_{args.beta}"
+        )
+        else:
+            checkpoints_dir = Path(CHECKPOINTS_DIR_DISPRITES) / args.model_type / f"seed_{args.seed}_beta_{args.beta}"
+            tensorboard_logger = TensorBoardLogger(save_dir = LOGS_DIR_DISPRITES, name = args.model_type, version = f"seed_{args.seed}_beta_{args.beta}")
 
     if args.model_type == 'factor_vae':
         model = FactorVAE(
@@ -56,10 +92,18 @@ def main():
             lr_disc = args.lr_disc,
             gamma = args.gamma,
             disc_hidden_units = args.hidden_units_d,
-            disc_layers = args.num_layers_d
+            disc_layers = args.num_layers_d,
+            in_channels = in_channels,
+            out_channels = in_channels,
+            rec_loss = reconstruction_loss
         )
-        checkpoints_dir = Path(CHECKPOINTS_DIR_DISPRITES) / args.model_type / f"seed_{args.seed}_gamma_{args.gamma}"
-        tensorboard_logger = TensorBoardLogger(save_dir = LOGS_DIR_DISPRITES, name = args.model_type, version = f"seed_{args.seed}_gamma_{args.gamma}")
+
+        if args.dataset == 'mpi3d':
+            checkpoints_dir = Path(CHECKPOINTS_DIR_MPI3D) / args.model_type / f"seed_{args.seed}_gamma_{args.gamma}"
+            tensorboard_logger = TensorBoardLogger(save_dir = LOGS_DIR_MPI3D, name = args.model_type, version = f"seed_{args.seed}_gamma_{args.gamma}")
+        else:
+            checkpoints_dir = Path(CHECKPOINTS_DIR_DISPRITES) / args.model_type / f"seed_{args.seed}_gamma_{args.gamma}"
+            tensorboard_logger = TensorBoardLogger(save_dir = LOGS_DIR_DISPRITES, name = args.model_type, version = f"seed_{args.seed}_gamma_{args.gamma}")
     
     # Callbacks
     checkpoints = ModelCheckpoint(

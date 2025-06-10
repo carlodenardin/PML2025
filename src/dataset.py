@@ -139,4 +139,3 @@ class DSpritesDataModule(pl.LightningDataModule):
             pin_memory = True,
             persistent_workers = True
         )
-

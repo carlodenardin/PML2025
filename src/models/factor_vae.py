@@ -5,26 +5,26 @@ from .base_vae import BaseVAE
 from .shared_networks import Discriminator
 
 class FactorVAE(BaseVAE):
-    """FactorVAE model for disentangled representation learning, extending VAE with a TC loss."""
-    def __init__(self, latent_dim: int, lr_vae: float = 1e-4, lr_disc: float = 1e-4,
-                 gamma: float = 10.0, disc_hidden_units: int = 1000, disc_layers: int = 6):
-        super().__init__(latent_dim, lr_vae)
+    def __init__(
+            self,
+            latent_dim: int,
+            lr_vae: float = 1e-4,
+            lr_disc: float = 1e-4,
+            gamma: float = 10.0,
+            disc_hidden_units: int = 1000,
+            disc_layers: int = 6,
+            in_channels: int = 1,
+            out_channels: int = 1,
+            rec_loss: str = 'bce'
+        ):
+        super().__init__(latent_dim, lr_vae, in_channels, out_channels, rec_loss)
+
         self.lr_disc = lr_disc
         self.gamma = gamma
         self.automatic_optimization = False
-        self.discriminator = Discriminator(latent_dim, hidden_units=disc_hidden_units, num_layers=disc_layers)
+        self.discriminator = Discriminator(latent_dim, hidden_units = disc_hidden_units, num_layers = disc_layers)
 
     def _permute_dims(self, z):
-        """
-        Permutes latent dimensions across batch for q_bar(z) sampling, as per FactorVAE [Kim & Mnih, 2018].
-        
-        Args:
-            z (torch.Tensor): Latent samples of shape (batch_size, latent_dim).
-        
-        Returns:
-            torch.Tensor: Permuted latent samples of same shape.
-        """
-        assert z.ndim == 2
         B, D = z.shape
         permuted_z = torch.zeros_like(z)
         for i in range(D):
@@ -95,8 +95,12 @@ class FactorVAE(BaseVAE):
         return val_loss
 
     def configure_optimizers(self):
-        opt_vae = torch.optim.Adam(list(self.encoder.parameters()) + list(self.decoder.parameters()),
-                                   lr=self.lr_vae, betas=(0.9, 0.999))
-        opt_disc = torch.optim.Adam(self.discriminator.parameters(),
-                                    lr=self.lr_disc, betas=(0.5, 0.9))
+        opt_vae = torch.optim.Adam(
+            list(self.encoder.parameters()) + list(self.decoder.parameters()),
+            lr=self.lr_vae, betas=(0.9, 0.999)
+        )
+        opt_disc = torch.optim.Adam(
+            self.discriminator.parameters(),
+            lr=self.lr_disc, betas=(0.5, 0.9)
+        )
         return opt_vae, opt_disc

@@ -2,8 +2,16 @@ import torch
 from .base_vae import BaseVAE
 
 class BetaVAE(BaseVAE):
-    def __init__(self, latent_dim: int, lr: float = 1e-4, beta: float = 1.0):
-        super().__init__(latent_dim, lr)
+    def __init__(
+            self,
+            latent_dim: int,
+            lr: float = 1e-4,
+            beta: float = 1.0,
+            in_channels: int = 1,
+            out_channels: int = 1,
+            rec_loss: str = 'bce'
+        ):
+        super().__init__(latent_dim, lr, in_channels, out_channels, rec_loss)
         self.beta = beta
 
     def training_step(self, batch, batch_idx):

@@ -1,18 +1,28 @@
-# DIRECTORY SETTINGS
+# DIRECTORY DSPRITES SETTINGS
 RESULTS_DIR_DSPRITES = "results/dsprites"
 CHECKPOINTS_DIR_DISPRITES = "checkpoints/dsprites"
 LOGS_DIR_DISPRITES = "logs/dsprites"
 
-# DATASET DSPRITES SETTINGS
+# DATASET SETTINGS
 URL_DSPRITES = "https://github.com/deepmind/dsprites-dataset/blob/master/dsprites_ndarray_co1sh3sc6or40x32y32_64x64.npz?raw=true"
 FILENAME_DSPRITES = "dsprites_ndarray_co1sh3sc6or40x32y32_64x64.npz"
 DIR_DSPRITES = "data/dsprites"
+
+# DIRECTORY DSPRITES SETTINGS
+RESULTS_DIR_MPI3D = "results/mpi3d"
+CHECKPOINTS_DIR_MPI3D = "checkpoints/mpi3d"
+LOGS_DIR_MPI3D = "logs/mpi3d"
+
+# DATASET SETTINGS
+URL_MPI3D = "https://huggingface.co/datasets/waleedgondal/mpi3d/resolve/main/mpi3d_toy.npz"
+FILENAME_MPI3D = "mpi3d_toy.npz"
+DIR_MPI3D = "data/mpi3d"
 
 # EXPERIMENT SETTINGS
 SEED = 19
 BATCH_SIZE = 512
 NUM_WORKERS = 12
-TRAIN_VAL_TEST_SPLIT = [0.8, 0.1, 0.1]
+TRAIN_VAL_TEST_SPLIT = [0.001, 0.001, 0.998]
 EPOCHS = 100
 PATIENCE = 3
 PRECISION = "16-mixed"

@@ -3,14 +3,15 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 class Encoder(nn.Module):
-    """Encoder for VAE/FactorVAE, mapping 64x64 images to latent mean and log-variance."""
-    def __init__(self, latent_dim):
+    def __init__(self, latent_dim, in_channels = 1):
         super().__init__()
         self.latent_dim = latent_dim
-        self.conv1 = nn.Conv2d(1, 32, kernel_size=4, stride=2, padding=1)
-        self.conv2 = nn.Conv2d(32, 32, kernel_size=4, stride=2, padding=1)
-        self.conv3 = nn.Conv2d(32, 64, kernel_size=4, stride=2, padding=1)
-        self.conv4 = nn.Conv2d(64, 64, kernel_size=4, stride=2, padding=1)
+
+        self.conv1 = nn.Conv2d(in_channels, 32, kernel_size = 4, stride = 2, padding = 1)
+        self.conv2 = nn.Conv2d(32, 32, kernel_size = 4, stride = 2, padding = 1)
+        self.conv3 = nn.Conv2d(32, 64, kernel_size = 4, stride = 2, padding = 1)
+        self.conv4 = nn.Conv2d(64, 64, kernel_size = 4, stride = 2, padding = 1)
+
         self.fc_intermediate = nn.Linear(64 * 4 * 4, 128)
         self.fc_mean = nn.Linear(128, latent_dim)
         self.fc_logvar = nn.Linear(128, latent_dim)
@@ -25,16 +26,17 @@ class Encoder(nn.Module):
         return self.fc_mean(x), self.fc_logvar(x)
 
 class Decoder(nn.Module):
-    """Decoder for VAE/FactorVAE, mapping latent vectors to 64x64 image logits."""
-    def __init__(self, latent_dim):
+    def __init__(self, latent_dim, out_channels = 1):
         super().__init__()
         self.latent_dim = latent_dim
+
         self.fc1 = nn.Linear(latent_dim, 128)
         self.fc2 = nn.Linear(128, 4 * 4 * 64)
-        self.upconv1 = nn.ConvTranspose2d(64, 64, kernel_size=4, stride=2, padding=1)
-        self.upconv2 = nn.ConvTranspose2d(64, 32, kernel_size=4, stride=2, padding=1)
-        self.upconv3 = nn.ConvTranspose2d(32, 32, kernel_size=4, stride=2, padding=1)
-        self.upconv4 = nn.ConvTranspose2d(32, 1, kernel_size=4, stride=2, padding=1)
+
+        self.upconv1 = nn.ConvTranspose2d(64, 64, kernel_size = 4, stride = 2, padding = 1)
+        self.upconv2 = nn.ConvTranspose2d(64, 32, kernel_size = 4, stride = 2, padding = 1)
+        self.upconv3 = nn.ConvTranspose2d(32, 32, kernel_size = 4, stride = 2, padding = 1)
+        self.upconv4 = nn.ConvTranspose2d(32, out_channels, kernel_size = 4, stride = 2, padding = 1)
 
     def forward(self, z):
         x = F.relu(self.fc1(z))
@@ -47,7 +49,6 @@ class Decoder(nn.Module):
         return x_recon_logits
 
 class Discriminator(nn.Module):
-    """Discriminator for FactorVAE, distinguishing between q(z) and q_bar(z)."""
     def __init__(self, latent_dim, hidden_units=1000, num_layers=6):
         super().__init__()
         layers = []
