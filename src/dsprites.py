@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Optional, List, Tuple, Callable
+from typing import Callable, List, Optional
 
 import numpy as np
 import pytorch_lightning as pl
@@ -12,7 +12,10 @@ from tqdm import tqdm
 from config import *
 
 class DSpritesDataset(Dataset):
-
+    """
+        A PyTorch Dataset for dSprites
+        Handles downloading and loading of the dataset
+    """
     def __init__(
         self,
         data_dir: str,
@@ -28,7 +31,7 @@ class DSpritesDataset(Dataset):
         self.data_dir.mkdir(parents = True, exist_ok = True)
 
         if not self.filepath.exists():
-            print(f"DSprites not found. Downloading from: {URL_DSPRITES}...")
+            print(f"dSprites dataset not found. Downloading from: {URL_DSPRITES}...")
             self._download()
 
         with np.load(self.filepath, allow_pickle = True, encoding = 'bytes') as dataset_zip:
@@ -36,19 +39,22 @@ class DSpritesDataset(Dataset):
             self.latents_values = dataset_zip['latents_values']
         
     def _download(self) -> None:
+        """
+            Downloads the dSprites dataset
+        """
         try:
-            with requests.get(URL_DSPRITES, stream=True) as response:
+            with requests.get(URL_DSPRITES, stream = True) as response:
                 response.raise_for_status()
                 total_size = int(response.headers.get('content-length', 0))
 
                 with open(self.filepath, 'wb') as file, tqdm(
-                    total=total_size, unit='iB', unit_scale=True, desc="Downloading dSprites"
+                    total = total_size, unit = 'iB', unit_scale = True, desc = "Downloading dSprites"
                 ) as progress_bar:
-                    for data in response.iter_content(chunk_size=1024):
+                    for data in response.iter_content(chunk_size = 1024):
                         file.write(data)
                         progress_bar.update(len(data))
         except requests.exceptions.RequestException as e:
-            print(f"DSprites not downloaded. Error: {e}")
+            print(f"dSprites could not be downloaded. Error: {e}")
             raise
 
     def __len__(self) -> int:
@@ -66,8 +72,11 @@ class DSpritesDataset(Dataset):
         
         return image
 
-
 class DSpritesDataModule(pl.LightningDataModule):
+    """
+        PyTorch Lightning DataModule for the dSprites dataset.
+        Handles data preparation, setup, and dataloaders.
+    """
     def __init__(
         self,
         data_dir: str,
@@ -88,15 +97,20 @@ class DSpritesDataModule(pl.LightningDataModule):
         self.dsprites_test: Optional[Dataset] = None
 
     def prepare_data(self) -> None:
-
+        """
+            Downloads the dataset if it doesn't exist
+        """
         DSpritesDataset(self.data_dir, return_latents = True)
 
     def setup(self, stage: Optional[str] = None) -> None:
+        """
+            Splits the dataset into train, validation, and test sets
+        """
         if self.dsprites_train is None:
             dsprites_full = DSpritesDataset(
-                data_dir=self.data_dir,
-                transform=self.transform,
-                return_latents=True
+                data_dir = self.data_dir,
+                transform = self.transform,
+                return_latents = True
             )
             total_len = len(dsprites_full)
             train_len = int(self.train_val_test_split[0] * total_len)
@@ -104,15 +118,15 @@ class DSpritesDataModule(pl.LightningDataModule):
             test_len = total_len - train_len - val_len
 
             self.dsprites_train, self.dsprites_val, self.dsprites_test = random_split(
-                dsprites_full,
-                [train_len, val_len, test_len],
-                generator=torch.Generator().manual_seed(SEED)
+                dataset = dsprites_full,
+                lengths = [train_len, val_len, test_len],
+                generator = torch.Generator().manual_seed(SEED)
             )
-            print(f"Dataset: Train = {len(self.dsprites_train)}, Val = {len(self.dsprites_val)}, Test = {len(self.dsprites_test)}")
+            print(f"Dataset splits: Train={len(self.dsprites_train)}, Val={len(self.dsprites_val)}, Test={len(self.dsprites_test)}")
 
     def train_dataloader(self) -> DataLoader:
         return DataLoader(
-            self.dsprites_train,
+            dataset = self.dsprites_train,
             batch_size = self.batch_size,
             shuffle = True,
             num_workers = self.num_workers,
@@ -122,7 +136,7 @@ class DSpritesDataModule(pl.LightningDataModule):
 
     def val_dataloader(self) -> DataLoader:
         return DataLoader(
-            self.dsprites_val,
+            dataset = self.dsprites_val,
             batch_size = self.batch_size,
             shuffle = False,
             num_workers = self.num_workers,
@@ -132,7 +146,7 @@ class DSpritesDataModule(pl.LightningDataModule):
 
     def test_dataloader(self) -> DataLoader:
         return DataLoader(
-            self.dsprites_test,
+            dataset = self.dsprites_test,
             batch_size = self.batch_size,
             shuffle = False,
             num_workers = self.num_workers,

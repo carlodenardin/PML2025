@@ -1,8 +1,7 @@
 torch
+pytorch_lightning
 torchvision
-pytorch-lightning
-numpy
 matplotlib
-imageio
+scikit-learn
+tensorboard
 requests
-tqdm

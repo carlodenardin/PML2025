@@ -1,7 +1,7 @@
 # DIRECTORY DSPRITES SETTINGS
 RESULTS_DIR_DSPRITES = "results/dsprites"
-CHECKPOINTS_DIR_DISPRITES = "checkpoints/dsprites"
-LOGS_DIR_DISPRITES = "logs/dsprites"
+CHECKPOINTS_DIR_DSPRITES = "checkpoints/dsprites"
+LOGS_DIR_DSPRITES = "logs/dsprites"
 
 # DATASET SETTINGS
 URL_DSPRITES = "https://github.com/deepmind/dsprites-dataset/blob/master/dsprites_ndarray_co1sh3sc6or40x32y32_64x64.npz?raw=true"
