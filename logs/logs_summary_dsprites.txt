@@ -902,4 +902,3 @@ Epoca 44:  D_fake_pred_mean=0.3318  D_real_pred_mean=0.6362  train_disc_loss=0.5
 Epoca 45:  D_fake_pred_mean=0.3281  D_real_pred_mean=0.6392  train_disc_loss=0.5228  train_kl_div_vae=17.6003  train_recon_loss=50.6345  train_tc_loss_vae_term=0.7061  train_vae_loss=73.8832  val_disc_loss=0.4796  val_kl_div_vae=17.8620  val_loss=75.1033  val_mig=0.0670  val_recon_loss=48.8754
 
 ----------------------------------------
-

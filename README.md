@@ -13,7 +13,7 @@ This is achieved by modifying the standard VAE objective to penalize the model f
 
 The models are evaluated using standard disentanglement metrics like the Mutual Information Gap (MIG) [Isolating Sources of Disentanglement in VAEs](https://arxiv.org/pdf/1802.04942).
 
-
+Note: The dataset used are automaically downloaded in the train test phase. To download them refers to the URLs present in the [config.py](https://arxiv.org/pdf/1802.04942) file.
 
 ## Requirements
 These are the requirements for the project:
@@ -74,3 +74,9 @@ sh run_test.sh
 ```
 
 ## Results
+
+Beta VAE shows a clear reconstruction–disentanglement trade-off: as beta increases, reconstruction error degrades, while disentanglement improves.
+
+Factor VAE achieves a better balance by penalizing Total Correlation (TC). It maintains a stable reconstruction and reaches a MIG value up to 0.22 on dSprites and 0.21 on MPI3D. The increasing confusion of the discriminator confirms improved latent independence with higher γ.
+
+On the complex MPI3D dataset, both models achieved the highest MIG value with low beta or gamma values. This suggests that richer data may inherently support better factor separation, even with weaker regularization.
