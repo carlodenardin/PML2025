@@ -84,5 +84,5 @@ On the complex MPI3D dataset, both models achieved the highest MIG value with lo
 
 #### Beta VAE
 
-![Reconstruction](results/dsprites/beta_vae/reconstruction.png.png)
-![Reconstruction](results/dsprites/beta_vae/reconstruction_loss.png.png)
+![Reconstruction](results/dsprites/beta_vae/reconstruction.png)
+![Reconstruction](results/dsprites/beta_vae/reconstruction_loss.png)
