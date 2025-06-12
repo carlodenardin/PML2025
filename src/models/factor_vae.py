@@ -44,7 +44,7 @@ class FactorVAE(BaseVAE):
         self.automatic_optimization = False
         
         self.discriminator = Discriminator(
-            input_dim = latent_dim,
+            latent_dim = latent_dim,
             hidden_units = disc_hidden_units,
             num_layers = disc_layers
         )
