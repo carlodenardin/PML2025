@@ -33,7 +33,6 @@ For a quick env (miniconda) e library installation run:
 sh install.sh
 ```
 
-
 ## How to Train
 To train the models the [train.py](https://arxiv.org/pdf/1802.04942) implementation can be used with the default parameters provided in the [config.py](https://arxiv.org/pdf/1802.04942) or by overriding them:
 
@@ -80,3 +79,9 @@ Beta VAE shows a clear reconstruction–disentanglement trade-off: as beta incre
 Factor VAE achieves a better balance by penalizing Total Correlation (TC). It maintains a stable reconstruction and reaches a MIG value up to 0.22 on dSprites and 0.21 on MPI3D. The increasing confusion of the discriminator confirms improved latent independence with higher γ.
 
 On the complex MPI3D dataset, both models achieved the highest MIG value with low beta or gamma values. This suggests that richer data may inherently support better factor separation, even with weaker regularization.
+
+### dSprites
+
+#### Beta VAE
+
+[logo]: https://github.com/adam-p/markdown-here/raw/master/src/common/images/icon48.png
